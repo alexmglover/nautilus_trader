@@ -3582,42 +3582,12 @@ impl ExecutionEngine {
     fn determine_netting_position_id(
         &self,
         fill: &OrderFilled,
-        order: Option<&OrderAny>,
+        _order: Option<&OrderAny>,
     ) -> PositionId {
-        let position_id = PositionId::new(format!("{}-{}", fill.instrument_id, fill.strategy_id));
-        let cache = self.cache.borrow();
-        if order.is_none_or(|order| !order.is_reduce_only())
-            || cache
-                .position_ref(&position_id)
-                .is_some_and(|position| position.is_open())
-        {
-            return position_id;
-        }
-
-        let mut candidates = cache
-            .positions_open(
-                None,
-                Some(&fill.instrument_id),
-                Some(&StrategyId::external()),
-                Some(&fill.account_id),
-                None,
-            )
-            .into_iter()
-            .filter(|position| {
-                position.is_opposite_side(fill.order_side)
-                    && cache.oms_type(&position.id) == Some(OmsType::Netting)
-            });
-
-        let candidate = candidates.next();
-
-        if let Some(position) = candidate
-            && candidates.next().is_none()
-            && fill.last_qty <= position.quantity
-        {
-            return position.id;
-        }
-
-        position_id
+        // FORK: shared netting — one position per instrument across all strategies.
+        // Upstream keys on (instrument_id, strategy_id); we key on instrument_id alone
+        // so that multiple strategies trading the same instrument share a single position.
+        PositionId::new(format!("{}", fill.instrument_id))
     }
 
     fn validate_fill_for_order(&self, order: &OrderAny, fill: &OrderFilled) -> anyhow::Result<()> {
